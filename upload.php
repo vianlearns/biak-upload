@@ -21,10 +21,12 @@ try {
     
     $uploadedFiles = [];
     $errors = [];
+    $totalRequested = 0;
     
     // Proses setiap file
     if (isset($_FILES['files']) && !empty($_FILES['files']['name'][0])) {
         $filesCount = count($_FILES['files']['name']);
+        $totalRequested = $filesCount;
         
         for ($i = 0; $i < $filesCount; $i++) {
             $fileName = $_FILES['files']['name'][$i];
@@ -61,6 +63,10 @@ try {
             }
         }
     }
+
+    if ($totalRequested === 0 || count($uploadedFiles) === 0) {
+        $errors[] = 'Tidak ada file yang diunggah';
+    }
     
     if (!empty($errors)) {
         echo json_encode([
@@ -71,6 +77,8 @@ try {
         echo json_encode([
             'status' => 'success',
             'id' => $next_id,
+            'saved_count' => count($uploadedFiles),
+            'saved_files' => array_map(function($f){ return $f['name']; }, $uploadedFiles),
             'message' => 'File berhasil diunggah'
         ]);
     }

@@ -34,6 +34,8 @@ require_once 'config.php';
             from { opacity: 0; transform: translateY(-10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .spinner { width: 56px; height: 56px; border: 6px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -103,6 +105,10 @@ require_once 'config.php';
         <footer class="text-center mt-8 text-gray-600 text-sm">
             <p>&copy; <?php echo date('Y'); ?> Biro Akademik UDINUS - Sistem Upload Sementara</p>
         </footer>
+    </div>
+
+    <div id="uploadOverlay" class="hidden fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+        <div class="spinner"></div>
     </div>
 
     <div id="notification" class="fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg transform translate-y-full transition-transform duration-300">
@@ -234,6 +240,7 @@ require_once 'config.php';
             
             uploadBtn.addEventListener('click', uploadFiles);
             const BASE_URL = '<?php echo BASE_URL; ?>';
+            const uploadOverlay = document.getElementById('uploadOverlay');
             
             function uploadFiles() {
                 if (selectedFiles.length === 0) {
@@ -254,6 +261,7 @@ require_once 'config.php';
                 uploadForm.classList.add('hidden');
                 progressContainer.classList.remove('hidden');
                 progressList.innerHTML = '';
+                uploadOverlay.classList.remove('hidden');
                 
                 // Buat progress bar untuk setiap file
                 selectedFiles.forEach((file, index) => {
@@ -277,14 +285,19 @@ require_once 'config.php';
                 })
                 .then(response => response.json())
                 .then(data => {
+                    uploadOverlay.classList.add('hidden');
                     if (data.status === 'success') {
+                        if (typeof data.saved_count !== 'number' || data.saved_count !== selectedFiles.length) {
+                            showNotification(`Validasi gagal: ${data.saved_count || 0}/${selectedFiles.length} tersimpan`, 'error');
+                            resetForm();
+                            return;
+                        }
                         const link = `${BASE_URL}view.php?id=${data.id}`;
                         accessLink.textContent = link;
-                        
                         setTimeout(() => {
                             progressContainer.classList.add('hidden');
                             resultContainer.classList.remove('hidden');
-                        }, 1000);
+                        }, 300);
                     } else {
                         showNotification('Terjadi kesalahan: ' + data.message, 'error');
                         resetForm();
@@ -294,6 +307,7 @@ require_once 'config.php';
                     console.error('Error:', error);
                     showNotification('Terjadi kesalahan saat mengunggah file', 'error');
                     resetForm();
+                    uploadOverlay.classList.add('hidden');
                 });
             }
             
