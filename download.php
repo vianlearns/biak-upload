@@ -45,7 +45,10 @@ if (!file_exists($filePath)) {
 
 // Set header untuk download
 header('Content-Description: File Transfer');
-header('Content-Type: ' . $fileData['jenis_berkas']);
+ $finfo = function_exists('finfo_open') ? finfo_open(FILEINFO_MIME_TYPE) : false;
+ $mime = $finfo ? finfo_file($finfo, $filePath) : 'application/octet-stream';
+ if ($finfo) { finfo_close($finfo); }
+header('Content-Type: ' . $mime);
 header('Content-Disposition: attachment; filename="' . $originalName . '"');
 header('Expires: 0');
 header('Cache-Control: must-revalidate');

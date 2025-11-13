@@ -279,13 +279,31 @@ require_once 'config.php';
                     progressList.appendChild(progressItem);
                 });
                 
-                fetch('upload.php', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
+                const totalSize = selectedFiles.reduce((s, f) => s + f.size, 0);
+                const offsets = [];
+                let accSize = 0;
+                selectedFiles.forEach(f => { offsets.push(accSize); accSize += f.size; });
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', 'upload.php');
+                xhr.upload.onprogress = function(e) {
+                    if (!e.lengthComputable) return;
+                    const loaded = e.loaded;
+                    selectedFiles.forEach((file, index) => {
+                        const start = offsets[index];
+                        const end = start + file.size;
+                        const loadedForFile = Math.min(Math.max(loaded - start, 0), file.size);
+                        const percent = Math.round((loadedForFile / file.size) * 100);
+                        const bar = document.querySelector(`.progress-bar-${index}`);
+                        const text = document.querySelector(`.progress-percent-${index}`);
+                        if (bar) bar.style.width = percent + '%';
+                        if (text) text.textContent = percent + '%';
+                    });
+                };
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState !== 4) return;
                     uploadOverlay.classList.add('hidden');
+                    let data;
+                    try { data = JSON.parse(xhr.responseText); } catch (_) { data = { status: 'error', message: 'Respons tidak valid' }; }
                     if (data.status === 'success') {
                         if (typeof data.saved_count !== 'number' || data.saved_count !== selectedFiles.length) {
                             showNotification(`Validasi gagal: ${data.saved_count || 0}/${selectedFiles.length} tersimpan`, 'error');
@@ -294,21 +312,19 @@ require_once 'config.php';
                         }
                         const link = `${BASE_URL}view.php?id=${data.id}`;
                         accessLink.textContent = link;
-                        setTimeout(() => {
-                            progressContainer.classList.add('hidden');
-                            resultContainer.classList.remove('hidden');
-                        }, 300);
+                        progressContainer.classList.add('hidden');
+                        resultContainer.classList.remove('hidden');
                     } else {
-                        showNotification('Terjadi kesalahan: ' + data.message, 'error');
+                        showNotification('Terjadi kesalahan: ' + (data.message || 'Tidak diketahui'), 'error');
                         resetForm();
                     }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
+                };
+                xhr.onerror = function() {
+                    uploadOverlay.classList.add('hidden');
                     showNotification('Terjadi kesalahan saat mengunggah file', 'error');
                     resetForm();
-                    uploadOverlay.classList.add('hidden');
-                });
+                };
+                xhr.send(formData);
             }
             
             copyBtn.addEventListener('click', () => {

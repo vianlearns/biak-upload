@@ -33,33 +33,33 @@ try {
             $fileTmpName = $_FILES['files']['tmp_name'][$i];
             $fileSize = $_FILES['files']['size'][$i];
             $fileType = $_FILES['files']['type'][$i];
-            
-            // Generate nama file unik untuk menghindari duplikasi
-            $uniqueFileName = time() . '_' . $fileName;
+            $fileError = $_FILES['files']['error'][$i];
+            if ($fileError !== UPLOAD_ERR_OK) {
+                $errors[] = "Gagal mengunggah file $fileName";
+                continue;
+            }
+            $sanitizedName = preg_replace('/[^\pL\pN\.\-_ ]/u', '_', $fileName);
+            $sanitizedName = trim($sanitizedName);
+            if ($sanitizedName === '') { $sanitizedName = 'file'; }
+            $uniqueFileName = time() . '_' . $sanitizedName;
             $uploadPath = 'uploads/' . $uniqueFileName;
-            
-            // Pindahkan file ke folder uploads
             if (move_uploaded_file($fileTmpName, $uploadPath)) {
-                // Simpan informasi file ke database
                 $stmt = $conn->prepare("INSERT INTO uploads (id_urutan, nama_file, jenis_berkas, ukuran_file, waktu_upload, waktu_hapus) VALUES (?, ?, ?, ?, ?, ?)");
                 $stmt->bind_param("ississ", $next_id, $uniqueFileName, $fileType, $fileSize, $uploadTime, $deleteTime);
-                
                 if ($stmt->execute()) {
                     $uploadedFiles[] = [
-                        'name' => $fileName,
+                        'name' => $sanitizedName,
                         'path' => $uploadPath,
                         'type' => $fileType,
                         'size' => $fileSize
                     ];
                 } else {
-                    $errors[] = "Gagal menyimpan informasi file $fileName ke database";
-                    // Hapus file yang sudah diupload jika gagal menyimpan ke database
+                    $errors[] = "Gagal menyimpan informasi file $sanitizedName ke database";
                     unlink($uploadPath);
                 }
-                
                 $stmt->close();
             } else {
-                $errors[] = "Gagal mengunggah file $fileName";
+                $errors[] = "Gagal mengunggah file $sanitizedName";
             }
         }
     }
