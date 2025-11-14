@@ -1,211 +1,218 @@
 <?php
 require_once 'config.php';
 
-// Mendapatkan ID dari URL
- $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+// Ambil ID dari URL
+$id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 if ($id <= 0) {
-    header('Location: index.php');
-    exit;
+    die("ID tidak valid");
 }
 
-// Query untuk mendapatkan data file berdasarkan ID
- $stmt = $conn->prepare("SELECT * FROM uploads WHERE id_urutan = ? ORDER BY id ASC");
- $stmt->bind_param("i", $id);
- $stmt->execute();
- $result = $stmt->get_result();
+// Ambil data file dari database
+$stmt = $pdo->prepare("SELECT * FROM uploads WHERE id_urutan = ? ORDER BY waktu_upload ASC");
+$stmt->execute([$id]);
+$files = $stmt->fetchAll();
 
-if ($result->num_rows === 0) {
-    header('Location: index.php');
-    exit;
+if (empty($files)) {
+    die("Tidak ada file dengan ID tersebut");
 }
 
- $files = [];
- $deleteTime = null;
-while ($row = $result->fetch_assoc()) {
-    $files[] = $row;
-    $deleteTime = $row['waktu_hapus'];
+// Hitung waktu tersisa
+$firstFile = $files[0];
+$deleteTime = strtotime($firstFile['waktu_hapus']);
+$now = time();
+$timeRemaining = $deleteTime - $now;
+
+// Format waktu tersisa
+function formatTimeRemaining($seconds) {
+    if ($seconds <= 0) {
+        return "File telah kadaluarsa";
+    }
+    
+    $days = floor($seconds / 86400);
+    $hours = floor(($seconds % 86400) / 3600);
+    $minutes = floor(($seconds % 3600) / 60);
+    
+    $parts = [];
+    if ($days > 0) $parts[] = "$days hari";
+    if ($hours > 0) $parts[] = "$hours jam";
+    if ($minutes > 0) $parts[] = "$minutes menit";
+    
+    return implode(' ', $parts) . " lagi";
 }
 
- $stmt->close();
- $conn->close();
+$timeRemainingText = formatTimeRemaining($timeRemaining);
 ?>
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Berkas #<?php echo $id; ?> - Biro Akademik UDINUS</title>
+    <title>File Upload #<?= $id ?> - Biro Akademik UDINUS</title>
+    <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📁</text></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
     <style>
         .file-item {
-            animation: fadeIn 0.3s ease-in;
+            transition: all 0.3s ease;
         }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
+        .file-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .download-btn {
+            transition: all 0.2s ease;
+        }
+        .download-btn:hover {
+            transform: scale(1.05);
+        }
+    </style>
+    <style>
+        .animate-fade-in {
+            animation: fade-in 0.5s ease-in-out;
         }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
     <div class="container mx-auto px-4 py-8 max-w-4xl">
-        <header class="text-center mb-10">
-            <h1 class="text-3xl font-bold text-blue-800 mb-2">Berkas #<?php echo $id; ?></h1>
-            <p class="text-gray-600">Biro Akademik UDINUS</p>
-        </header>
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800 mb-2">Biro Akademik UDINUS</h1>
+            <p class="text-gray-600">File Upload #<?= $id ?></p>
+        </div>
 
-        <main class="bg-white rounded-lg shadow-md p-6">
-            <div class="mb-6">
-                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h2 class="text-lg font-semibold text-blue-800">Informasi Berkas</h2>
-                            <p class="text-sm text-gray-600 mt-1">
-                                <i class="fas fa-clock mr-1"></i>
-                                Diunggah pada: <?php echo date('d M Y H:i', strtotime($files[0]['waktu_upload'])); ?>
-                            </p>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-sm text-gray-600">Waktu tersisa:</p>
-                            <p class="text-lg font-semibold text-red-600" id="countdown"></p>
-                        </div>
+        <!-- Info Card -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-blue-600"><?= count($files) ?></div>
+                    <div class="text-sm text-gray-600">Total File</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-green-600">
+                        <?= number_format(array_sum(array_column($files, 'ukuran_file')) / 1024 / 1024, 2) ?> MB
+                    </div>
+                    <div class="text-sm text-gray-600">Total Ukuran</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold <?= $timeRemaining <= 0 ? 'text-red-600' : 'text-orange-600' ?>">
+                        <?= $timeRemainingText ?>
+                    </div>
+                    <div class="text-sm text-gray-600">Waktu Tersisa</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Warning if expired -->
+        <?php if ($timeRemaining <= 0): ?>
+        <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-red-800">File Kadaluarsa</h3>
+                    <div class="mt-2 text-sm text-red-700">
+                        <p>File ini telah melebihi batas waktu dan mungkin sudah dihapus otomatis oleh sistem.</p>
                     </div>
                 </div>
             </div>
+        </div>
+        <?php endif; ?>
 
-            <div class="mb-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-medium">Daftar File (<?php echo count($files); ?>)</h3>
-                    <button id="downloadAllBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition">
-                        <i class="fas fa-download mr-2"></i>Unduh Semua
-                    </button>
+        <!-- Download All Button -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <div class="flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-800">Daftar File</h2>
+                    <p class="text-sm text-gray-600">Upload: <?= date('d/m/Y H:i', strtotime($firstFile['waktu_upload'])) ?></p>
                 </div>
+                <button onclick="downloadAll()" class="download-btn bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">
+                    <svg class="inline-block w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                    Download Semua
+                </button>
+            </div>
+        </div>
 
-                <div class="space-y-2" id="fileList">
-                    <?php foreach ($files as $file): ?>
-                        <div class="file-item flex items-center justify-between p-3 bg-gray-50 rounded hover:bg-gray-100 transition">
-                            <div class="flex items-center">
-                                <i class="<?php echo getFileIcon($file['jenis_berkas']); ?> mr-3 text-gray-600 text-xl"></i>
-                                <div>
-                                    <p class="font-medium"><?php echo getOriginalFileName($file['nama_file']); ?></p>
-                                    <p class="text-sm text-gray-500">
-                                        <?php echo $file['jenis_berkas']; ?> � <?php echo formatFileSize($file['ukuran_file']); ?>
-                                    </p>
-                                </div>
-                            </div>
-                            <a href="download.php?file=<?php echo urlencode($file['nama_file']); ?>" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded transition">
-                                <i class="fas fa-download"></i>
-                            </a>
+        <!-- Files List -->
+        <div class="space-y-4">
+            <?php foreach ($files as $index => $file): ?>
+            <div class="file-item bg-white rounded-lg shadow p-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4 flex-1 min-w-0">
+                        <!-- File Icon -->
+                        <div class="flex-shrink-0">
+                            <?php
+                            $extension = strtolower(pathinfo($file['nama_asli'], PATHINFO_EXTENSION));
+                            $iconClass = 'text-gray-400';
+                            
+                            if (in_array($extension, ['pdf'])) $iconClass = 'text-red-500';
+                            elseif (in_array($extension, ['doc', 'docx'])) $iconClass = 'text-blue-500';
+                            elseif (in_array($extension, ['xls', 'xlsx'])) $iconClass = 'text-green-500';
+                            elseif (in_array($extension, ['jpg', 'jpeg', 'png', 'gif'])) $iconClass = 'text-purple-500';
+                            elseif (in_array($extension, ['zip', 'rar'])) $iconClass = 'text-yellow-500';
+                            elseif (in_array($extension, ['mp4', 'avi', 'mkv'])) $iconClass = 'text-indigo-500';
+                            ?>
+                            <svg class="h-10 w-10 <?= $iconClass ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
                         </div>
-                    <?php endforeach; ?>
+                        
+                        <!-- File Info -->
+                        <div class="flex-1 min-w-0">
+                            <h3 class="text-sm font-medium text-gray-900 truncate"><?= htmlspecialchars($file['nama_asli']) ?></h3>
+                            <p class="text-sm text-gray-500">
+                                <?= number_format($file['ukuran_file'] / 1024 / 1024, 2) ?> MB • 
+                                <?= date('d/m/Y H:i', strtotime($file['waktu_upload'])) ?>
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Download Button -->
+                    <a href="download.php?id=<?= $file['id'] ?>" 
+                       class="download-btn inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                        </svg>
+                        Download
+                    </a>
                 </div>
             </div>
+            <?php endforeach; ?>
+        </div>
 
-            <div class="text-center">
-                <a href="index.php" class="text-blue-600 hover:text-blue-800 transition">
-                    <i class="fas fa-arrow-left mr-2"></i>Kembali ke Halaman Upload
-                </a>
-            </div>
-        </main>
-
-        <footer class="text-center mt-8 text-gray-600 text-sm">
-            <p>&copy; <?php echo date('Y'); ?> Biro Akademik UDINUS - Sistem Upload Sementara</p>
-        </footer>
+        <!-- Footer -->
+        <div class="text-center mt-8 text-gray-500 text-sm">
+            <p>&copy; 2024 Biro Akademik UDINUS. Website ini untuk keperluan sementara.</p>
+        </div>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const countdownEl = document.getElementById('countdown');
-            const downloadAllBtn = document.getElementById('downloadAllBtn');
-            const deleteTime = <?php echo (int)(strtotime($deleteTime) * 1000); ?>;
+        function downloadAll() {
+            const fileIds = <?= json_encode(array_column($files, 'id')) ?>;
             
-            // Update countdown setiap detik
-            const countdownInterval = setInterval(function() {
-                const now = new Date().getTime();
-                const distance = deleteTime - now;
-                
-                if (distance < 0) {
-                    clearInterval(countdownInterval);
-                    countdownEl.textContent = "Kedaluwarsa";
-                    countdownEl.className = "text-lg font-semibold text-gray-500";
-                    
-                    // Nonaktifkan tombol download
-                    downloadAllBtn.disabled = true;
-                    downloadAllBtn.className = "bg-gray-400 text-white px-4 py-2 rounded cursor-not-allowed";
-                    downloadAllBtn.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i>Berkas Kedaluwarsa';
-                    
-                    // Nonaktifkan semua tombol download individual
-                    document.querySelectorAll('#fileList a').forEach(link => {
-                        link.removeAttribute('href');
-                        link.className = "bg-gray-400 text-white px-3 py-1 rounded cursor-not-allowed";
-                        link.innerHTML = '<i class="fas fa-times"></i>';
-                    });
-                    
-                    return;
-                }
-                
-                const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-                const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-                const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-                
-                let countdownText = '';
-                if (days > 0) {
-                    countdownText = `${days} hari ${hours} jam ${minutes} menit`;
-                } else if (hours > 0) {
-                    countdownText = `${hours} jam ${minutes} menit ${seconds} detik`;
-                } else if (minutes > 0) {
-                    countdownText = `${minutes} menit ${seconds} detik`;
-                } else {
-                    countdownText = `${seconds} detik`;
-                }
-                
-                countdownEl.textContent = countdownText;
-            }, 1000);
-            
-            // Event listener untuk tombol download semua
-            downloadAllBtn.addEventListener('click', function() {
-                const fileLinks = document.querySelectorAll('#fileList a');
-                fileLinks.forEach(link => {
+            // Download file satu per satu dengan delay kecil
+            fileIds.forEach((id, index) => {
+                setTimeout(() => {
+                    const link = document.createElement('a');
+                    link.href = `download.php?id=${id}`;
+                    link.download = '';
+                    link.style.display = 'none';
+                    document.body.appendChild(link);
                     link.click();
-                });
+                    document.body.removeChild(link);
+                }, index * 500); // Delay 500ms antar file
             });
-        });
-        
-        <?php
-        // Fungsi helper untuk mendapatkan ikon file
-        function getFileIcon($fileType) {
-            if (strpos($fileType, 'image/') !== false) return 'fas fa-image';
-            if (strpos($fileType, 'video/') !== false) return 'fas fa-video';
-            if (strpos($fileType, 'pdf') !== false) return 'fas fa-file-pdf';
-            if (strpos($fileType, 'word') !== false || strpos($fileType, 'document') !== false) return 'fas fa-file-word';
-            if (strpos($fileType, 'excel') !== false || strpos($fileType, 'spreadsheet') !== false) return 'fas fa-file-excel';
-            if (strpos($fileType, 'powerpoint') !== false || strpos($fileType, 'presentation') !== false) return 'fas fa-file-powerpoint';
-            if (strpos($fileType, 'zip') !== false || strpos($fileType, 'rar') !== false || strpos($fileType, 'compressed') !== false) return 'fas fa-file-archive';
-            return 'fas fa-file';
         }
-        
-        // Fungsi helper untuk mendapatkan nama file asli
-        function getOriginalFileName($fileName) {
-            // Format nama file: timestamp_nama_asli
-            $parts = explode('_', $fileName, 2);
-            if (count($parts) >= 2) {
-                return $parts[1];
-            }
-            return $fileName;
-        }
-        
-        // Fungsi helper untuk format ukuran file
-        function formatFileSize($bytes) {
-            if ($bytes === 0) return '0 Bytes';
-            $k = 1024;
-            $sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            $i = floor(log($bytes) / log($k));
-            return floatval(number_format($bytes / pow($k, $i), 2)) . ' ' . $sizes[$i];
-        }
-        ?>
+
+        // Auto refresh setiap 30 detik untuk update waktu tersisa
+        setInterval(() => {
+            location.reload();
+        }, 30000);
     </script>
 </body>
 </html>

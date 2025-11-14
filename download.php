@@ -1,71 +1,64 @@
 <?php
-require_once __DIR__ . '/config.php';
+require_once 'config.php';
 
-// Mendapatkan nama file dari URL
- $fileName = isset($_GET['file']) ? $_GET['file'] : '';
+// Ambil ID file dari parameter
+$fileId = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
-if (empty($fileName)) {
-    header('Location: index.php');
-    exit;
+if ($fileId <= 0) {
+    die("ID file tidak valid");
 }
 
-// Verifikasi file ada di database
- $stmt = $conn->prepare("SELECT * FROM uploads WHERE nama_file = ?");
- $stmt->bind_param("s", $fileName);
- $stmt->execute();
- $result = $stmt->get_result();
+try {
+    $stmt = $pdo->prepare("SELECT * FROM uploads WHERE id = ?");
+    $stmt->execute([$fileId]);
+    $file = $stmt->fetch();
 
-if ($result->num_rows === 0) {
-    header('Location: index.php');
-    exit;
-}
-
- $fileData = $result->fetch_assoc();
- $stmt->close();
- $conn->close();
-
-// Cek kedaluwarsa menggunakan waktu dari PHP untuk menghindari perbedaan timezone
-$expiresAt = strtotime($fileData['waktu_hapus']);
-if ($expiresAt !== false && $expiresAt <= time()) {
-    header('Location: index.php');
-    exit;
-}
-
-// Path file
- $filePath = __DIR__ . '/uploads/' . $fileName;
-
-// Periksa apakah file ada
-if (!file_exists($filePath)) {
-    header('Location: index.php');
-    exit;
-}
-
-// Mendapatkan nama file asli (tanpa timestamp)
- $originalName = getOriginalFileName($fileName);
-
-// Set header untuk download
-header('Content-Description: File Transfer');
- $finfo = function_exists('finfo_open') ? finfo_open(FILEINFO_MIME_TYPE) : false;
- $mime = $finfo ? finfo_file($finfo, $filePath) : 'application/octet-stream';
- if ($finfo) { finfo_close($finfo); }
-header('Content-Type: ' . $mime);
-header('Content-Disposition: attachment; filename="' . $originalName . '"');
-header('Expires: 0');
-header('Cache-Control: must-revalidate');
-header('Pragma: public');
-header('Content-Length: ' . filesize($filePath));
-
-// Baca file dan output ke browser
-readfile($filePath);
-exit;
-
-// Fungsi helper untuk mendapatkan nama file asli
-function getOriginalFileName($fileName) {
-    // Format nama file: timestamp_nama_asli
-    $parts = explode('_', $fileName, 2);
-    if (count($parts) >= 2) {
-        return $parts[1];
+    if (!$file) {
+        die("File tidak ditemukan atau sudah kadaluarsa");
     }
-    return $fileName;
+
+    $waktuHapusTs = strtotime($file['waktu_hapus']);
+    if ($waktuHapusTs !== false && $waktuHapusTs <= time()) {
+        die("File tidak ditemukan atau sudah kadaluarsa");
+    }
+
+    $filePath = UPLOAD_DIR . $file['nama_file'];
+    $originalName = $file['nama_asli'];
+
+    // Validasi file exists
+    if (!file_exists($filePath)) {
+        die("File tidak ditemukan di server");
+    }
+
+    // Set headers untuk download
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: attachment; filename="' . $originalName . '"');
+    header('Content-Length: ' . filesize($filePath));
+    header('Cache-Control: no-cache, no-store, must-revalidate');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+    
+    // Bersihkan output buffer
+    if (ob_get_level()) {
+        ob_end_clean();
+    }
+    
+    // Read file dengan chunk untuk file besar
+    $chunkSize = 1024 * 1024; // 1MB chunk
+    $handle = fopen($filePath, 'rb');
+    
+    if ($handle === false) {
+        die("Gagal membuka file");
+    }
+    
+    while (!feof($handle)) {
+        echo fread($handle, $chunkSize);
+        flush();
+    }
+    
+    fclose($handle);
+    exit;
+
+} catch (Exception $e) {
+    die("Error: " . $e->getMessage());
 }
-?>

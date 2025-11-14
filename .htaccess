@@ -1,4 +1,48 @@
-php_value upload_max_filesize 100M
-php_value post_max_size 120M
-php_value max_execution_time 300
-php_value max_input_time 300
+# Security configuration for upload system
+
+# Prevent directory listing
+Options -Indexes
+
+# Protect .htaccess file
+<Files .htaccess>
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Protect sensitive files
+<FilesMatch "\.(sql|log|txt|md)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Protect config file
+<Files config.php>
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Increase upload limits
+php_value upload_max_filesize 500M
+php_value post_max_size 500M
+php_value max_execution_time 0
+php_value max_input_time 0
+php_value memory_limit 512M
+
+# Increase POST content length limit
+LimitRequestBody 524288000
+
+# Enable mod_rewrite (if available)
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Redirect to view.php if file doesn't exist
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^([0-9]+)/?$ view.php?id=$1 [L,QSA]
+</IfModule>
+
+# Disable mod_security for large uploads (if enabled)
+<IfModule mod_security.c>
+    SecFilterEngine Off
+    SecFilterScanPOST Off
+</IfModule>
